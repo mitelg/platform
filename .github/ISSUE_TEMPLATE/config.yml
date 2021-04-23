@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+    -   name: Report a security vulnerability
+        url: https://github.com/shopware/platform/security/policy
+        about: Please review our security policy for more details
+    -   name: Issue Tracker
+        url: https://issues.shopware.com/createissue
+        about: Please create a ticket on our issue tracker instead
