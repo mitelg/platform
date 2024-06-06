@@ -19,6 +19,10 @@ class Migration1673964565MigrateToReferencedColumns extends MigrationStep
 
     public function update(Connection $connection): void
     {
+    }
+
+    public function updateDestructive(Connection $connection): void
+    {
         $columns = $connection->executeQuery('
             SELECT COLUMN_NAME,EXTRA FROM information_schema.columns
                 WHERE table_schema = :database
@@ -42,10 +46,6 @@ class Migration1673964565MigrateToReferencedColumns extends MigrationStep
             ');
         }
 
-        if (\array_key_exists('entity_id', $columns)) {
-            $connection->executeStatement('
-                ALTER TABLE `state_machine_history` DROP `entity_id`;
-            ');
-        }
+        $this->dropColumnIfExists($connection, 'state_machine_history', 'entity_id');
     }
 }
