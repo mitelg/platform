@@ -10,6 +10,7 @@ use Shopware\Core\Framework\Plugin\PluginLifecycleService;
 use Shopware\Core\Framework\Update\Api\UpdateController;
 use Shopware\Core\Framework\Update\Event\UpdatePostFinishEvent;
 use Shopware\Core\Framework\Update\Event\UpdatePreFinishEvent;
+use Shopware\Core\Maintenance\System\SystemException;
 use Shopware\Core\System\SystemConfig\SystemConfigService;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -18,7 +19,6 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -31,8 +31,11 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 #[Package('core')]
 class SystemUpdateFinishCommand extends Command
 {
-    public function __construct(private readonly ContainerInterface $container, private readonly string $shopwareVersion)
-    {
+    public function __construct(
+        private readonly EventDispatcherInterface $eventDispatcher,
+        private readonly SystemConfigService $systemConfigService,
+        private readonly string $shopwareVersion
+    ) {
         parent::__construct();
     }
 
@@ -55,87 +58,97 @@ class SystemUpdateFinishCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $output = new ShopwareStyle($input, $output);
+        $io = new ShopwareStyle($input, $output);
 
         $dsn = trim((string) EnvironmentHelper::getVariable('DATABASE_URL', getenv('DATABASE_URL')));
         if ($dsn === '') {
-            $output->note('Environment variable \'DATABASE_URL\' not defined. Skipping ' . $this->getName() . '...');
+            $io->note('Environment variable \'DATABASE_URL\' not defined. Skipping ' . $this->getName() . '...');
 
             return self::SUCCESS;
         }
 
-        $output->writeln('Run Post Update');
-        $output->writeln('');
-
-        /** @var EventDispatcherInterface $eventDispatcher */
-        $eventDispatcher = $this->container->get('event_dispatcher');
+        $io->writeln('Run Post Update');
+        $io->writeln('');
 
         $context = Context::createCLIContext();
-        $systemConfigService = $this->container->get(SystemConfigService::class);
-        $oldVersion = $systemConfigService->getString(UpdateController::UPDATE_PREVIOUS_VERSION_KEY);
+        $oldVersion = $this->systemConfigService->getString(UpdateController::UPDATE_PREVIOUS_VERSION_KEY);
 
         if ($input->getOption('skip-asset-build')) {
             $context->addState(PluginLifecycleService::STATE_SKIP_ASSET_BUILDING);
         }
 
-        $eventDispatcher->dispatch(new UpdatePreFinishEvent($context, $oldVersion, $this->shopwareVersion));
+        $this->eventDispatcher->dispatch(new UpdatePreFinishEvent($context, $oldVersion, $this->shopwareVersion));
 
         if (!$input->getOption('skip-migrations')) {
-            $this->runMigrations($output);
+            $this->runMigrations($io);
         }
 
         $updateEvent = new UpdatePostFinishEvent($context, $oldVersion, $this->shopwareVersion);
-        $eventDispatcher->dispatch($updateEvent);
+        $this->eventDispatcher->dispatch($updateEvent);
 
-        $output->writeln($updateEvent->getPostUpdateMessage());
+        $io->writeln($updateEvent->getPostUpdateMessage());
 
         if (!$input->getOption('skip-asset-build')) {
-            $this->installAssets($output);
+            $exitCode = $this->installAssets($io);
+            if ($exitCode !== self::SUCCESS) {
+                $io->warning('Error while installing assets');
+            }
         }
 
-        $output->writeln('');
+        $io->writeln('');
 
         return self::SUCCESS;
     }
 
-    private function runMigrations(OutputInterface $output): void
+    private function runMigrations(ShopwareStyle $io): void
     {
-        $application = $this->getApplication();
-        \assert($application !== null);
-        $command = $application->find('database:migrate');
+        $application = $this->getConsoleApplication();
 
-        $this->runCommand($application, $command, [
+        $command = $application->find('database:migrate');
+        $exitCode = $this->runCommand($application, $command, [
             'identifier' => 'core',
             '--all' => true,
-        ], $output);
+        ], $io);
+        if ($exitCode !== self::SUCCESS) {
+            $io->warning('Error while running migrations');
+        }
 
         $command = $application->find('database:migrate-destructive');
-        $this->runCommand($application, $command, [
+        $exitCode = $this->runCommand($application, $command, [
             'identifier' => 'core',
             '--all' => true,
             '--version-selection-mode' => 'blue-green',
-        ], $output);
+        ], $io);
+        if ($exitCode !== self::SUCCESS) {
+            $io->warning('Error while running destructive migrations');
+        }
     }
 
-    private function installAssets(OutputInterface $output): int
+    private function installAssets(ShopwareStyle $io): int
     {
-        $application = $this->getApplication();
-        \assert($application !== null);
+        $application = $this->getConsoleApplication();
         $command = $application->find('assets:install');
 
-        return $this->runCommand($application, $command, [], $output);
+        return $this->runCommand($application, $command, [], $io);
     }
 
     /**
      * @param array<string, string|bool|null> $arguments
      */
-    private function runCommand(Application $application, Command $command, array $arguments, OutputInterface $output): int
+    private function runCommand(Application $application, Command $command, array $arguments, ShopwareStyle $io): int
     {
         \array_unshift($arguments, $command->getName());
 
-        return $application->doRun(
-            new ArrayInput($arguments),
-            $output
-        );
+        return $application->doRun(new ArrayInput($arguments), $io);
+    }
+
+    private function getConsoleApplication(): Application
+    {
+        $application = $this->getApplication();
+        if (!$application instanceof Application) {
+            throw SystemException::consoleApplicationNotFound();
+        }
+
+        return $application;
     }
 }
