@@ -117,7 +117,7 @@ class SystemUpdateFinishCommand extends Command
         $exitCode = $this->runCommand($application, $command, [
             'identifier' => 'core',
             '--all' => true,
-            '--version-selection-mode' => 'blue-green',
+            '--version-selection-mode' => 'safe',
         ], $io);
         if ($exitCode !== self::SUCCESS) {
             $io->warning('Error while running destructive migrations');
