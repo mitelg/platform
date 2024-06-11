@@ -84,6 +84,9 @@ class MigrationCollectionLoader
      */
     public function collectAllForVersion(string $version, string $mode = self::VERSION_SELECTION_ALL): MigrationCollection
     {
+        dump(\Shopware\Core\Kernel::SHOPWARE_FALLBACK_VERSION);
+        dump($version);
+        dump($mode);
         $safeMajorVersion = $this->getLastSafeMajorVersion($version, $mode);
 
         $namespaces = [];
