@@ -76,7 +76,7 @@ jobs:
       - name: Checkout current major version
         uses: actions/checkout@v4
         with:
-          ref: 'trunk'
+          ref: 'next-33734/blue-green-pipeline'
 
       - name: Strip cs-fixer in current major version
         run: rm -rf vendor-bin
