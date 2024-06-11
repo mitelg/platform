@@ -32,7 +32,7 @@ class MigrationCollectionLoader
      */
     final public const VERSION_SELECTION_SAFE = 'safe';
 
-    private const VALID_VERSION_SELECTION_SAFE_VALUES = [
+    public const VALID_VERSION_SELECTION_SAFE_VALUES = [
         self::VERSION_SELECTION_ALL,
         self::VERSION_SELECTION_BLUE_GREEN,
         self::VERSION_SELECTION_SAFE,
@@ -79,8 +79,14 @@ class MigrationCollectionLoader
         return new MigrationCollection($source, $this->migrationRuntime, $this->connection, $this->logger);
     }
 
+    /**
+     * @param self::VERSION_SELECTION_* $mode
+     */
     public function collectAllForVersion(string $version, string $mode = self::VERSION_SELECTION_ALL): MigrationCollection
     {
+        dump(\Shopware\Core\Kernel::SHOPWARE_FALLBACK_VERSION);
+        dump($version);
+        dump($mode);
         $safeMajorVersion = $this->getLastSafeMajorVersion($version, $mode);
 
         $namespaces = [];
@@ -94,6 +100,9 @@ class MigrationCollectionLoader
         return new MigrationCollection($source, $this->migrationRuntime, $this->connection, $this->logger);
     }
 
+    /**
+     * @param self::VERSION_SELECTION_* $mode
+     */
     public function getLastSafeMajorVersion(string $currentVersion, string $mode = self::VERSION_SELECTION_ALL): int
     {
         if (!\in_array($mode, self::VALID_VERSION_SELECTION_SAFE_VALUES, true)) {
