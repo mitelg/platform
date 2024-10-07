@@ -51,6 +51,8 @@ export default {
             limit: this.defaultLimit,
             sorting: this.defaultSorting,
             isLoading: false,
+            selectedCurrencyIsoCode: 'EUR',
+            selectedCurrencyId: Context.app.systemCurrencyId,
         };
     },
 
@@ -146,7 +148,9 @@ export default {
         onSalesChannelChange() {
             this.page = 1;
             this.isLoading = true;
-            this.loadEntityData().finally(() => {
+            this.loadSalesChannelById().then(() => {
+                return this.loadEntityData();
+            }).finally(() => {
                 this.isLoading = false;
             });
         },
@@ -161,7 +165,7 @@ export default {
                 this.previewCriteria,
                 this.mapFiltersForSearch(this.filters),
                 {
-                    'sw-currency-id': Context.app.systemCurrencyId,
+                    'sw-currency-id': this.selectedCurrencyId,
                     'sw-inheritance': true,
                 },
             ).then((result) => {
@@ -176,17 +180,19 @@ export default {
             });
         },
 
-        mapFiltersForSearch(filters = []) {
+        mapFiltersForSearch(filters = [], parentType = null) {
             return filters.map((condition) => {
                 const { field, type, operator, value, parameters, queries } = condition;
-                const mappedQueries = this.mapFiltersForSearch(queries);
+                const mappedQueries = this.mapFiltersForSearch(queries, type);
                 const mapped = { field, type, operator, value, parameters, queries: mappedQueries };
 
                 if (field === 'id' || field === 'product.id') {
+                    const newOperator = this.isNotEqualToAnyType(type, parentType) ? 'AND' : 'OR';
+
                     return {
                         type: 'multi',
                         field: null,
-                        operator: 'OR',
+                        operator: newOperator,
                         value: null,
                         parameters: null,
                         queries: [mapped, { ...mapped, ...{ field: 'parentId' } }],
@@ -225,6 +231,27 @@ export default {
             this.loadEntityData().finally(() => {
                 this.isLoading = false;
             });
+        },
+
+        loadSalesChannelById() {
+            if (this.selectedSalesChannel === null) {
+                return Promise.resolve();
+            }
+
+            const criteria = this.salesChannelCriteria;
+
+            criteria.addAssociation('currency');
+
+            return this.salesChannelRepository
+                .get(this.selectedSalesChannel, Shopware.Context.api, this.salesChannelCriteria)
+                .then((salesChannel) => {
+                    this.selectedCurrencyIsoCode = salesChannel.currency.isoCode;
+                    this.selectedCurrencyId = salesChannel.currencyId;
+                });
+        },
+
+        isNotEqualToAnyType(type, parentType) {
+            return type === 'equalsAny' && parentType === 'not';
         },
     },
 };

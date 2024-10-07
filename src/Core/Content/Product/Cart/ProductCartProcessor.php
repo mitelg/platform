@@ -27,6 +27,7 @@ use Shopware\Core\Framework\DataAbstractionLayer\Cache\EntityCacheKeyGenerator;
 use Shopware\Core\Framework\DataAbstractionLayer\Field\Flag\RuleAreas;
 use Shopware\Core\Framework\Feature;
 use Shopware\Core\Framework\Log\Package;
+use Shopware\Core\Framework\Util\Hasher;
 use Shopware\Core\Framework\Uuid\Uuid;
 use Shopware\Core\Profiling\Profiler;
 use Shopware\Core\System\SalesChannel\SalesChannelContext;
@@ -431,11 +432,12 @@ class ProductCartProcessor implements CartProcessorInterface, CartDataCollectorI
 
         foreach ($lineItems as $lineItem) {
             $id = $lineItem->getReferencedId();
-
-            $key = $this->getDataKey((string) $id);
+            if ($id === '' || $id === null) {
+                continue;
+            }
 
             // data already fetched?
-            if ($data->has($key)) {
+            if ($data->has($this->getDataKey($id))) {
                 continue;
             }
 
@@ -580,6 +582,6 @@ class ProductCartProcessor implements CartProcessorInterface, CartDataCollectorI
             return $taxRule->getRules()?->getIds() ?: $taxRule->getId();
         }, $context->getTaxRules()->getElements());
 
-        return md5($contextHash . json_encode($activeTaxRules));
+        return Hasher::hash($contextHash . json_encode($activeTaxRules), 'md5');
     }
 }
